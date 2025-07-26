@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   XCircle,
   FileImage,
+  PlusSquare,
+  User,
+  Cpu,
 } from "lucide-react";
 import { analyzeImage, type AnalyzeImageOutput } from "@/ai/flows/analyze-image";
 import { Button } from "@/components/ui/button";
@@ -27,6 +30,11 @@ import { cn } from "@/lib/utils";
 
 type AnalysisState = "idle" | "preview" | "loading" | "result";
 
+interface AnalyzedImage {
+  url: string;
+  result: AnalyzeImageOutput;
+}
+
 export function ImageAnalyzer() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -34,6 +42,9 @@ export function ImageAnalyzer() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
+
+  const [realPhotos, setRealPhotos] = useState<AnalyzedImage[]>([]);
+  const [aiPhotos, setAiPhotos] = useState<AnalyzedImage[]>([]);
 
   const handleFile = useCallback(
     (file: File | undefined) => {
@@ -90,14 +101,28 @@ export function ImageAnalyzer() {
   }, [imageFile, toast]);
 
   const handleReset = useCallback(() => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
+    // We don't revoke the object URL here because it might have been added to the dataset
     setImageFile(null);
     setPreviewUrl(null);
     setResult(null);
     setIsLoading(false);
-  }, [previewUrl]);
+  }, []);
+
+  const handleAddToDataset = useCallback(() => {
+    if (!previewUrl || !result) return;
+    const newImage: AnalyzedImage = { url: previewUrl, result };
+    if (result.isAiGenerated) {
+      setAiPhotos((prev) => [newImage, ...prev]);
+    } else {
+      setRealPhotos((prev) => [newImage, ...prev]);
+    }
+    handleReset();
+    toast({
+      title: "Image Added",
+      description: "The image has been added to your dataset.",
+    });
+  }, [previewUrl, result, handleReset, toast]);
+
 
   const state: AnalysisState = useMemo(() => {
     if (isLoading) return "loading";
@@ -107,66 +132,75 @@ export function ImageAnalyzer() {
   }, [isLoading, result, previewUrl]);
 
   return (
-    <Card className="w-full max-w-4xl shadow-lg rounded-xl overflow-hidden transition-all duration-300">
-      <CardHeader className="border-b">
-        <div className="flex items-center gap-4">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Sparkles className="w-8 h-8 text-primary" />
+    <div className="w-full max-w-7xl mx-auto flex flex-col gap-8">
+      <Card className="w-full shadow-lg rounded-xl overflow-hidden transition-all duration-300">
+        <CardHeader className="border-b">
+          <div className="flex items-center gap-4">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Sparkles className="w-8 h-8 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl font-headline tracking-tight">
+                AI Image Detector
+              </CardTitle>
+              <CardDescription>
+                Is your image authentic or AI-generated?
+              </CardDescription>
+            </div>
           </div>
-          <div>
-            <CardTitle className="text-2xl font-headline tracking-tight">
-              AI Image Detector
-            </CardTitle>
-            <CardDescription>
-              Is your image authentic or AI-generated?
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="p-4 sm:p-8">
-        {state === "idle" && (
-          <Dropzone
-            onFileSelect={handleFile}
-            isDragging={isDragging}
-            setIsDragging={setIsDragging}
-          />
-        )}
-        {(state === "preview" || state === "loading" || state === "result") && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <div className="flex flex-col gap-4">
-              <div className="relative w-full aspect-1 bg-muted rounded-lg overflow-hidden border-2 border-dashed">
-                {previewUrl && (
-                  <Image
-                    src={previewUrl}
-                    alt="Image preview"
-                    fill
-                    className="object-contain"
-                    data-ai-hint="abstract painting"
+        </CardHeader>
+        <CardContent className="p-4 sm:p-8">
+          {state === "idle" && (
+            <Dropzone
+              onFileSelect={handleFile}
+              isDragging={isDragging}
+              setIsDragging={setIsDragging}
+            />
+          )}
+          {(state === "preview" || state === "loading" || state === "result") && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <div className="flex flex-col gap-4">
+                <div className="relative w-full aspect-1 bg-muted rounded-lg overflow-hidden border-2 border-dashed">
+                  {previewUrl && (
+                    <Image
+                      src={previewUrl}
+                      alt="Image preview"
+                      fill
+                      className="object-contain"
+                      data-ai-hint="abstract painting"
+                    />
+                  )}
+                </div>
+                <Button
+                  onClick={handleReset}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Analyze Another Image
+                </Button>
+              </div>
+              <div className="flex flex-col justify-center min-h-[300px]">
+                {state === "loading" && <AnalysisSkeleton />}
+                {state === "result" && result && (
+                  <AnalysisResultDisplay
+                    result={result}
+                    onAddToDataset={handleAddToDataset}
                   />
                 )}
+                {state === "preview" && (
+                  <AnalysisPrompt onAnalyze={handleAnalyze} />
+                )}
               </div>
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                className="w-full"
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Analyze Another Image
-              </Button>
             </div>
-            <div className="flex flex-col justify-center min-h-[300px]">
-              {state === "loading" && <AnalysisSkeleton />}
-              {state === "result" && result && (
-                <AnalysisResultDisplay result={result} />
-              )}
-              {state === "preview" && (
-                <AnalysisPrompt onAnalyze={handleAnalyze} />
-              )}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <ImageGallery title="Your Real Photos" icon={User} images={realPhotos} />
+        <ImageGallery title="Your AI-Generated Photos" icon={Cpu} images={aiPhotos} />
+      </div>
+    </div>
   );
 }
 
@@ -259,7 +293,7 @@ function AnalysisSkeleton() {
   );
 }
 
-function AnalysisResultDisplay({ result }: { result: AnalyzeImageOutput }) {
+function AnalysisResultDisplay({ result, onAddToDataset }: { result: AnalyzeImageOutput; onAddToDataset: () => void; }) {
   const confidencePercent = Math.round(result.confidenceScore * 100);
   const verdict = result.isAiGenerated
     ? "Likely AI-Generated"
@@ -301,6 +335,10 @@ function AnalysisResultDisplay({ result }: { result: AnalyzeImageOutput }) {
           {result.rationale}
         </p>
       </div>
+      <Button onClick={onAddToDataset} className="w-full">
+        <PlusSquare className="mr-2 h-4 w-4" />
+        Add to Dataset
+      </Button>
     </div>
   );
 }
@@ -323,5 +361,40 @@ function LabelWithPercent({
         {percent}%
       </span>
     </div>
+  );
+}
+
+function ImageGallery({ title, icon: Icon, images }: { title: string; icon: React.ElementType; images: AnalyzedImage[]; }) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <Icon className="w-6 h-6 text-muted-foreground" />
+          <CardTitle className="text-xl">{title}</CardTitle>
+          <span className="text-sm font-mono px-2 py-1 bg-muted rounded-md">{images.length}</span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {images.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg bg-secondary/30">
+            <p className="text-muted-foreground">No images yet.</p>
+            <p className="text-sm text-muted-foreground">Analyze an image to add it here.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {images.map((image, index) => (
+              <div key={index} className="relative aspect-square rounded-lg overflow-hidden border">
+                <Image
+                  src={image.url}
+                  alt={`Dataset image ${index + 1}`}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
