@@ -35,11 +35,19 @@ const analyzeImagePrompt = ai.definePrompt({
   name: 'analyzeImagePrompt',
   input: {schema: AnalyzeImageInputSchema},
   output: {schema: AnalyzeImageOutputSchema},
-  prompt: `You are an expert AI image analyst. You will analyze the image provided to determine if it is AI-generated or not. You will provide a confidence score (0-1) of your decision, and a rationale for your decision.
+  prompt: `You are a skeptical and meticulous AI image analyst. Your primary goal is to distinguish between genuine photographs and AI-generated images, with a strong bias against making false accusations. Only classify an image as AI-generated if you find clear and undeniable evidence.
 
-Image: {{media url=photoDataUri}}
+Look for specific artifacts commonly associated with AI generation, such as:
+- Illogical or inconsistent lighting and shadows.
+- Unnatural or distorted features on people and animals (e.g., hands, eyes, ears).
+- Strange, nonsensical, or garbled text within the image.
+- Unnatural textures, patterns, or repeating elements.
+- Warped or distorted backgrounds.
+- An overall "too perfect" or plastic-like appearance.
 
-Is the image AI-generated? Give your answer as a JSON string that conforms to the schema. Be brief.`,
+Analyze the following image. If no such artifacts are present, you should classify it as authentic. Provide your analysis as a JSON string that conforms to the schema.
+
+Image: {{media url=photoDataUri}}`,
 });
 
 const analyzeImageFlow = ai.defineFlow(
