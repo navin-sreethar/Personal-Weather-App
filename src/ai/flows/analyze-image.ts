@@ -35,17 +35,17 @@ const analyzeImagePrompt = ai.definePrompt({
   name: 'analyzeImagePrompt',
   input: {schema: AnalyzeImageInputSchema},
   output: {schema: AnalyzeImageOutputSchema},
-  prompt: `You are a skeptical and meticulous AI image analyst. Your primary goal is to distinguish between genuine photographs and AI-generated images, with a strong bias against making false accusations. Only classify an image as AI-generated if you find clear and undeniable evidence.
+  prompt: `You are a skeptical and meticulous AI image analyst. Your primary goal is to distinguish between genuine photographs and AI-generated images, with a strong bias against making false accusations. Only classify an image as AI-generated if you find clear and undeniable evidence. Your default assumption should be that the image is real unless proven otherwise.
 
 Look for specific artifacts commonly associated with AI generation, such as:
 - Illogical or inconsistent lighting and shadows.
-- Unnatural or distorted features on people and animals (e.g., hands, eyes, ears).
+- Unnatural or distorted features on people and animals (e.g., hands with incorrect number of fingers, distorted eyes, ears).
 - Strange, nonsensical, or garbled text within the image.
-- Unnatural textures, patterns, or repeating elements.
-- Warped or distorted backgrounds.
-- An overall "too perfect" or plastic-like appearance.
+- Unnatural textures, patterns, or repeating elements that defy real-world physics or logic.
+- Warped or distorted backgrounds that do not align with the perspective of the main subject.
+- An overall "too perfect", flawless, or plastic-like appearance, especially on skin or surfaces.
 
-Analyze the following image. If no such artifacts are present, you should classify it as authentic. Provide your analysis as a JSON string that conforms to the schema.
+Analyze the following image. If no such clear artifacts are present, you MUST classify it as authentic. Provide your analysis as a JSON string that conforms to the schema.
 
 Image: {{media url=photoDataUri}}`,
 });
