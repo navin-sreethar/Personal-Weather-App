@@ -12,16 +12,21 @@ import {z} from 'genkit';
 
 const GetWeatherInputSchema = z.object({
   city: z.string().describe('The city for which to get the weather.'),
+  temperature_unit: z
+    .enum(['celsius', 'fahrenheit'])
+    .optional()
+    .default('celsius')
+    .describe('The temperature unit to use.'),
 });
 export type GetWeatherInput = z.infer<typeof GetWeatherInputSchema>;
 
 const GetWeatherOutputSchema = z.object({
-  temperature: z.number().describe('The current temperature in Celsius.'),
+  temperature: z.number().describe('The current temperature.'),
   windSpeed: z.number().describe('The current wind speed in km/h.'),
   weatherCondition: z.string().describe('A description of the current weather condition.'),
   humidity: z.number().describe('The current relative humidity in percent.'),
   precipitation: z.number().describe('The current precipitation in millimeters.'),
-  apparentTemperature: z.number().describe('The apparent temperature in Celsius.'),
+  apparentTemperature: z.number().describe('The apparent temperature.'),
 });
 export type GetWeatherOutput = z.infer<typeof GetWeatherOutputSchema>;
 
@@ -82,7 +87,7 @@ const getCurrentWeather = ai.defineTool(
     inputSchema: GetWeatherInputSchema,
     outputSchema: GetWeatherOutputSchema,
   },
-  async ({city}) => {
+  async ({city, temperature_unit}) => {
     // 1. Get lat/lon for the city
     const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
       city
@@ -98,7 +103,7 @@ const getCurrentWeather = ai.defineTool(
     }
 
     // 2. Get weather for the lat/lon
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m`;
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&temperature_unit=${temperature_unit}`;
     const weatherResponse = await fetch(weatherUrl);
     if (!weatherResponse.ok) {
       throw new Error('Failed to fetch weather data.');
