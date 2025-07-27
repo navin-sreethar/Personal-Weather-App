@@ -11,6 +11,7 @@ import {
   Droplets,
   CloudRain,
   X,
+  MessageSquareQuote,
 } from "lucide-react";
 import { getWeather, type GetWeatherOutput, searchCities, CitySearchOutput } from "@/ai/flows/analyze-image";
 import { Button } from "@/components/ui/button";
@@ -102,11 +103,17 @@ export function WeatherApp() {
             variant: "destructive",
           });
         }
+        // Also remove city from saved list if API call fails for it
+        setSavedCities(prev => prev.filter(c => c !== searchCity));
+        if (activeTab === searchCity) {
+            setActiveTab(savedCities[0] || "");
+        }
+
       } finally {
         setIsLoading(false);
       }
     },
-    [toast, savedCities]
+    [toast, savedCities, activeTab]
   );
   
   const handleCitySearch = (query: string) => {
@@ -152,7 +159,8 @@ export function WeatherApp() {
     setWeatherData(newWeatherData);
 
     if (activeTab === cityToRemove && newSavedCities.length > 0) {
-        setActiveTab(newSavedCities[0]);
+        const newActiveTab = newSavedCities.includes(activeTab) ? activeTab : newSavedCities[0];
+        setActiveTab(newActiveTab);
     } else if (newSavedCities.length === 0) {
         setActiveTab("");
     }
@@ -167,23 +175,31 @@ export function WeatherApp() {
     const newUnit = checked ? "fahrenheit" : "celsius";
     setTempUnit(newUnit);
     
-    // Refetch weather for all saved cities with the new unit
     if (savedCities.length > 0) {
       setIsLoading(true);
       const weatherPromises = savedCities.map(city => 
-        getWeather({ city, temperature_unit: newUnit })
+        getWeather({ city, temperature_unit: newUnit }).catch(err => {
+            console.error(`Failed to fetch weather for ${city}:`, err);
+            // Return a specific object or null on error to handle it in Promise.allSettled
+            return { error: true, city };
+        })
       );
 
-      Promise.allSettled(weatherPromises).then(results => {
-        const newWeatherData = { ...weatherData };
-        results.forEach((result, index) => {
-          const city = savedCities[index];
-          if (result.status === 'fulfilled') {
-            newWeatherData[city] = result.value;
-          } else {
-            console.error(`Failed to fetch weather for ${city}`, result.reason);
-            newWeatherData[city] = null; // Or keep old data, up to you
-          }
+      Promise.all(weatherPromises).then(results => {
+        const newWeatherData: Record<string, GetWeatherOutput | null> = {};
+        results.forEach((result: GetWeatherOutput | {error: boolean, city: string} | null) => {
+            if (result && 'summary' in result) {
+                 const cityKey = savedCities.find(c => result.summary.toLowerCase().includes(c.toLowerCase()));
+                 if (cityKey) {
+                    newWeatherData[cityKey] = result;
+                 }
+            } else if (result && 'error' in result) {
+                newWeatherData[result.city] = null;
+                toast({
+                    title: `Failed to update weather for ${result.city}`,
+                    variant: 'destructive'
+                })
+            }
         });
         setWeatherData(newWeatherData);
         setIsLoading(false);
@@ -216,8 +232,8 @@ export function WeatherApp() {
                     placeholder="E.g., London, Tokyo"
                     className="flex-grow"
                 />
-                 <Button type="button" size="icon" disabled={isLoading} onClick={() => handleGetWeather(city, tempUnit)}>
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                 <Button type="button" size="icon" disabled={isLoading && !isSearchingCities} onClick={() => handleGetWeather(city, tempUnit)}>
+                    {(isLoading && !isSearchingCities) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                 </Button>
                </div>
                 {showSuggestions && (city.length > 1) && (
@@ -250,7 +266,7 @@ export function WeatherApp() {
 
           {savedCities.length > 0 ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto pb-2">
                 <TabsList>
                   {savedCities.map((savedCity) => (
                     <div key={savedCity} className="relative group flex-shrink-0">
@@ -260,7 +276,7 @@ export function WeatherApp() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeCity(savedCity);
@@ -312,12 +328,14 @@ function WeatherDisplay({
   return (
     <div className="space-y-4 pt-4">
       <h2 className="text-2xl font-bold text-center capitalize">{city}</h2>
+      
       <Card className="p-4 bg-secondary/50">
         <div className="flex items-center justify-center gap-4 text-center">
-          <Cloud className="w-12 h-12 text-primary" />
-          <p className="text-2xl font-medium">{weather.weatherCondition}</p>
+            <MessageSquareQuote className="w-12 h-12 text-accent" />
+            <p className="text-base italic">"{weather.summary}"</p>
         </div>
       </Card>
+
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
         <WeatherMetric
           icon={<Thermometer className="text-destructive" />}
@@ -343,6 +361,11 @@ function WeatherDisplay({
           icon={<CloudRain className="text-gray-500" />}
           label="Precipitation"
           value={`${weather.precipitation} mm`}
+        />
+         <WeatherMetric
+          icon={<Cloud className="text-primary" />}
+          label="Condition"
+          value={weather.weatherCondition}
         />
       </div>
     </div>
@@ -374,11 +397,14 @@ function WeatherSkeleton() {
        <Card className="p-4 bg-secondary/50">
         <div className="flex items-center justify-center gap-4 text-center">
             <Skeleton className="w-12 h-12 rounded-full" />
-            <Skeleton className="h-6 w-32" />
+            <div className="space-y-2">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-40" />
+            </div>
         </div>
       </Card>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {[...Array(5)].map((_, i) => (
+        {[...Array(6)].map((_, i) => (
            <Card key={i} className="p-4 flex flex-col items-center justify-center gap-2">
              <Skeleton className="h-8 w-8 rounded-full" />
             <Skeleton className="h-6 w-16" />

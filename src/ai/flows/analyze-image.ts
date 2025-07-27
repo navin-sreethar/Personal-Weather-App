@@ -27,6 +27,7 @@ const GetWeatherOutputSchema = z.object({
   humidity: z.number().describe('The current relative humidity in percent.'),
   precipitation: z.number().describe('The current precipitation in millimeters.'),
   apparentTemperature: z.number().describe('The apparent temperature.'),
+  summary: z.string().describe('A conversational summary of the weather.'),
 });
 export type GetWeatherOutput = z.infer<typeof GetWeatherOutputSchema>;
 
@@ -115,7 +116,7 @@ const getCurrentWeather = ai.defineTool(
     name: 'getCurrentWeather',
     description: 'Get the current weather for a given city.',
     inputSchema: GetWeatherInputSchema,
-    outputSchema: GetWeatherOutputSchema,
+    outputSchema: GetWeatherOutputSchema.omit({ summary: true }),
   },
   async ({city, temperature_unit}) => {
     // 1. Get lat/lon for the city
@@ -153,6 +154,28 @@ const getCurrentWeather = ai.defineTool(
   }
 );
 
+const weatherSummaryPrompt = ai.definePrompt(
+    {
+      name: 'weatherSummaryPrompt',
+      input: {
+        schema: GetWeatherOutputSchema.omit({ summary: true }).extend({
+          city: z.string(),
+          temperature_unit: z.string(),
+        }),
+      },
+      output: { schema: z.object({ summary: z.string() }) },
+      prompt: `You are a friendly weather assistant. Given the weather data for a city, provide a short, conversational summary (2-3 sentences). Be encouraging and offer a small piece of advice, like suggesting to wear sunscreen if it's sunny, or to take an umbrella if it's raining.
+
+City: {{{city}}}
+Temperature: {{{temperature}}}{{#if (eq temperature_unit "celsius")}}°C{{else}}°F{{/if}}
+Feels Like: {{{apparentTemperature}}}{{#if (eq temperature_unit "celsius")}}°C{{else}}°F{{/if}}
+Condition: {{{weatherCondition}}}
+Wind: {{{windSpeed}}} km/h
+Humidity: {{{humidity}}}%
+Precipitation: {{{precipitation}}} mm`,
+    }
+);
+
 
 export async function getWeather(input: GetWeatherInput): Promise<GetWeatherOutput> {
   return getWeatherFlow(input);
@@ -164,7 +187,18 @@ const getWeatherFlow = ai.defineFlow(
     inputSchema: GetWeatherInputSchema,
     outputSchema: GetWeatherOutputSchema,
   },
-  async input => {
-    return await getCurrentWeather(input);
+  async (input) => {
+    const weatherData = await getCurrentWeather(input);
+
+    const summaryResponse = await weatherSummaryPrompt({
+        ...weatherData,
+        city: input.city,
+        temperature_unit: input.temperature_unit || 'celsius',
+    });
+    
+    return {
+        ...weatherData,
+        summary: summaryResponse.output!.summary,
+    }
   }
 );
