@@ -34,7 +34,37 @@ interface GeocodingResponse {
   results?: {
     latitude: number;
     longitude: number;
+    name: string;
+    country: string;
   }[];
+}
+
+const CitySearchInputSchema = z.object({
+  query: z.string().describe('The partial city name to search for.'),
+});
+export type CitySearchInput = z.infer<typeof CitySearchInputSchema>;
+
+const CitySearchOutputSchema = z.array(
+    z.object({
+        name: z.string(),
+        country: z.string(),
+    })
+);
+export type CitySearchOutput = z.infer<typeof CitySearchOutputSchema>;
+
+export async function searchCities(input: CitySearchInput): Promise<CitySearchOutput> {
+  if (!input.query || input.query.length < 2) {
+    return [];
+  }
+  const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+    input.query
+  )}&count=5&language=en&format=json`;
+  const geoResponse = await fetch(geoUrl);
+  if (!geoResponse.ok) {
+    throw new Error(`Failed to fetch geocoding data for ${input.query}`);
+  }
+  const geoData: GeocodingResponse = await geoResponse.json();
+  return (geoData.results || []).map(r => ({ name: r.name, country: r.country }));
 }
 
 interface WeatherResponse {

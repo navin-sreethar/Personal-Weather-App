@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   Sun,
   Wind,
@@ -10,10 +10,9 @@ import {
   Loader2,
   Droplets,
   CloudRain,
-  Trash2,
   X,
 } from "lucide-react";
-import { getWeather, type GetWeatherOutput } from "@/ai/flows/analyze-image";
+import { getWeather, type GetWeatherOutput, searchCities, CitySearchOutput } from "@/ai/flows/analyze-image";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,12 +33,18 @@ type TemperatureUnit = "celsius" | "fahrenheit";
 
 export function WeatherApp() {
   const [city, setCity] = useState("");
+  const [suggestions, setSuggestions] = useState<CitySearchOutput>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [savedCities, setSavedCities] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string>("");
   const [weatherData, setWeatherData] = useState<Record<string, GetWeatherOutput | null>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearchingCities, setIsSearchingCities] = useState(false);
   const [tempUnit, setTempUnit] = useState<TemperatureUnit>("celsius");
   const { toast } = useToast();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     try {
@@ -48,9 +53,9 @@ export function WeatherApp() {
         const parsedCities: string[] = JSON.parse(citiesFromStorage);
         setSavedCities(parsedCities);
         if (parsedCities.length > 0) {
-          const lastCity = parsedCities[parsedCities.length-1];
+          const lastCity = parsedCities[parsedCities.length - 1];
           setActiveTab(lastCity);
-          handleSearch(lastCity, tempUnit, false);
+          handleGetWeather(lastCity, tempUnit, false);
         }
       }
     } catch (error) {
@@ -58,7 +63,20 @@ export function WeatherApp() {
     }
   }, []);
 
-  const handleSearch = useCallback(
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [wrapperRef]);
+
+
+  const handleGetWeather = useCallback(
     async (searchCity: string, unit: TemperatureUnit, showToast = true) => {
       if (!searchCity) return;
       setIsLoading(true);
@@ -78,11 +96,11 @@ export function WeatherApp() {
       } catch (e: any) {
         console.error(e);
         if (showToast) {
-            toast({
-              title: "Failed to get weather",
-              description: e.message || "There was an error fetching the weather data.",
-              variant: "destructive",
-            });
+          toast({
+            title: "Failed to get weather",
+            description: e.message || "There was an error fetching the weather data.",
+            variant: "destructive",
+          });
         }
       } finally {
         setIsLoading(false);
@@ -90,12 +108,39 @@ export function WeatherApp() {
     },
     [toast, savedCities]
   );
+  
+  const handleCitySearch = (query: string) => {
+    setCity(query);
+    setShowSuggestions(true);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    handleSearch(city, tempUnit);
-    setCity("");
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    if (query.length > 1) {
+        setIsSearchingCities(true);
+      searchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const results = await searchCities({ query });
+          setSuggestions(results);
+        } catch (error) {
+          console.error("Failed to search cities:", error);
+          setSuggestions([]);
+        } finally {
+            setIsSearchingCities(false);
+        }
+      }, 300);
+    } else {
+      setSuggestions([]);
+    }
   };
+
+  const handleSuggestionClick = (selectedCity: string) => {
+    setCity(selectedCity);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    handleGetWeather(selectedCity, tempUnit);
+  };
+
 
   const removeCity = (cityToRemove: string) => {
     const newSavedCities = savedCities.filter((c) => c !== cityToRemove);
@@ -106,15 +151,12 @@ export function WeatherApp() {
     delete newWeatherData[cityToRemove];
     setWeatherData(newWeatherData);
 
-    if (activeTab === cityToRemove) {
-      if (newSavedCities.length > 0) {
-        const newActiveTab = newSavedCities.includes(activeTab) ? activeTab : newSavedCities[0];
-        setActiveTab(newActiveTab);
-      } else {
+    if (activeTab === cityToRemove && newSavedCities.length > 0) {
+        setActiveTab(newSavedCities[0]);
+    } else if (newSavedCities.length === 0) {
         setActiveTab("");
-      }
     }
-    
+
     toast({
       title: "City removed",
       description: `${cityToRemove} has been removed from your list.`,
@@ -125,7 +167,7 @@ export function WeatherApp() {
     const newUnit = checked ? "fahrenheit" : "celsius";
     setTempUnit(newUnit);
     if (activeTab) {
-      handleSearch(activeTab, newUnit);
+      handleGetWeather(activeTab, newUnit);
     }
   }
 
@@ -144,33 +186,53 @@ export function WeatherApp() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <form onSubmit={handleSubmit} className="flex items-center gap-2 flex-grow">
-              <Input
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="E.g., London, Tokyo"
-                className="flex-grow"
-              />
-              <Button type="submit" size="icon" disabled={isLoading}>
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4" />
+          <div className="flex justify-between items-start mb-4 gap-4">
+             <div className="relative flex-grow" ref={wrapperRef}>
+               <div className="flex items-center gap-2">
+                <Input
+                    value={city}
+                    onChange={(e) => handleCitySearch(e.target.value)}
+                    onFocus={() => setShowSuggestions(true)}
+                    placeholder="E.g., London, Tokyo"
+                    className="flex-grow"
+                />
+                 <Button type="button" size="icon" disabled={isLoading} onClick={() => handleGetWeather(city, tempUnit)}>
+                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </Button>
+               </div>
+                {showSuggestions && (city.length > 1) && (
+                    <Card className="absolute top-full mt-2 w-full z-10 max-h-60 overflow-y-auto">
+                        <CardContent className="p-2">
+                            {isSearchingCities ? (
+                                <div className="p-2 text-center text-sm text-muted-foreground">Searching...</div>
+                            ) : suggestions.length > 0 ? (
+                                suggestions.map((s, index) => (
+                                    <div
+                                        key={index}
+                                        className="p-2 hover:bg-secondary rounded-md cursor-pointer"
+                                        onClick={() => handleSuggestionClick(s.name)}
+                                    >
+                                        {s.name}, {s.country}
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="p-2 text-center text-sm text-muted-foreground">No cities found.</div>
+                            )}
+                        </CardContent>
+                    </Card>
                 )}
-              </Button>
-            </form>
-            <div className="flex items-center space-x-2 ml-4">
+            </div>
+            <div className="flex items-center space-x-2 pt-2">
               <Label htmlFor="temp-unit">°F</Label>
               <Switch id="temp-unit" checked={tempUnit === 'fahrenheit'} onCheckedChange={handleUnitChange} />
             </div>
           </div>
-          
+
           {savedCities.length > 0 ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="overflow-x-auto">
+              <TabsList className="overflow-x-auto justify-start">
                 {savedCities.map((savedCity) => (
-                  <div key={savedCity} className="relative group">
+                  <div key={savedCity} className="relative group flex-shrink-0">
                     <TabsTrigger value={savedCity} className="pr-8">
                       {savedCity}
                     </TabsTrigger>
@@ -199,15 +261,15 @@ export function WeatherApp() {
                       unit={tempUnit}
                     />
                   ) : (
-                    <div className="text-center text-muted-foreground py-10">
-                      <p>Select a city or search for a new one.</p>
+                     <div className="text-center text-muted-foreground py-10">
+                      <p>Loading weather data...</p>
                    </div>
                   )}
                 </TabsContent>
               ))}
             </Tabs>
           ) : (
-             <InitialState />
+            <InitialState />
           )}
         </CardContent>
       </Card>
@@ -224,14 +286,14 @@ function WeatherDisplay({
   city: string;
   unit: TemperatureUnit;
 }) {
-    const tempSymbol = unit === 'celsius' ? '°C' : '°F';
+  const tempSymbol = unit === 'celsius' ? '°C' : '°F';
   return (
     <div className="space-y-4 pt-4">
       <h2 className="text-2xl font-bold text-center capitalize">{city}</h2>
       <Card className="p-4 bg-secondary/50">
         <div className="flex items-center justify-center gap-4 text-center">
-            <Cloud className="w-12 h-12 text-primary" />
-            <p className="text-2xl font-medium">{weather.weatherCondition}</p>
+          <Cloud className="w-12 h-12 text-primary" />
+          <p className="text-2xl font-medium">{weather.weatherCondition}</p>
         </div>
       </Card>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
@@ -240,7 +302,7 @@ function WeatherDisplay({
           label="Temperature"
           value={`${weather.temperature}${tempSymbol}`}
         />
-         <WeatherMetric
+        <WeatherMetric
           icon={<Thermometer className="text-blue-400" />}
           label="Feels Like"
           value={`${weather.apparentTemperature}${tempSymbol}`}
@@ -276,7 +338,7 @@ function WeatherMetric({
 }) {
   return (
     <Card className="p-4 flex flex-col items-center justify-center gap-2">
-       <div className="[&>svg]:w-8 [&>svg]:h-8">{icon}</div>
+      <div className="[&>svg]:w-8 [&>svg]:h-8">{icon}</div>
       <p className="text-xl font-bold">{value}</p>
       <p className="text-sm text-muted-foreground">{label}</p>
     </Card>
@@ -287,18 +349,20 @@ function WeatherSkeleton() {
   return (
     <div className="space-y-6 animate-pulse pt-4">
       <Skeleton className="h-8 w-1/2 mx-auto" />
+       <Card className="p-4 bg-secondary/50">
+        <div className="flex items-center justify-center gap-4 text-center">
+            <Skeleton className="w-12 h-12 rounded-full" />
+            <Skeleton className="h-6 w-32" />
+        </div>
+      </Card>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="flex flex-col items-center space-y-2 p-4 border rounded-lg">
-            <Skeleton className="h-10 w-10 rounded-full" />
+           <Card key={i} className="p-4 flex flex-col items-center justify-center gap-2">
+             <Skeleton className="h-8 w-8 rounded-full" />
             <Skeleton className="h-6 w-16" />
             <Skeleton className="h-4 w-20" />
-          </div>
+          </Card>
         ))}
-      </div>
-      <div className="flex items-center justify-center gap-4">
-        <Skeleton className="h-8 w-8 rounded-full" />
-        <Skeleton className="h-6 w-40" />
       </div>
     </div>
   );
