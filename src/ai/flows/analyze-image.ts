@@ -19,6 +19,9 @@ const GetWeatherOutputSchema = z.object({
   temperature: z.number().describe('The current temperature in Celsius.'),
   windSpeed: z.number().describe('The current wind speed in km/h.'),
   weatherCondition: z.string().describe('A description of the current weather condition.'),
+  humidity: z.number().describe('The current relative humidity in percent.'),
+  precipitation: z.number().describe('The current precipitation in millimeters.'),
+  apparentTemperature: z.number().describe('The apparent temperature in Celsius.'),
 });
 export type GetWeatherOutput = z.infer<typeof GetWeatherOutputSchema>;
 
@@ -30,10 +33,13 @@ interface GeocodingResponse {
 }
 
 interface WeatherResponse {
-  current_weather: {
-    temperature: number;
-    windspeed: number;
-    weathercode: number;
+  current: {
+    temperature_2m: number;
+    wind_speed_10m: number;
+    weather_code: number;
+    relative_humidity_2m: number;
+    precipitation: number;
+    apparent_temperature: number;
   };
 }
 
@@ -92,7 +98,7 @@ const getCurrentWeather = ai.defineTool(
     }
 
     // 2. Get weather for the lat/lon
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&current_weather=true`;
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m`;
     const weatherResponse = await fetch(weatherUrl);
     if (!weatherResponse.ok) {
       throw new Error('Failed to fetch weather data.');
@@ -100,11 +106,14 @@ const getCurrentWeather = ai.defineTool(
     const weatherData: WeatherResponse = await weatherResponse.json();
 
     return {
-      temperature: weatherData.current_weather.temperature,
-      windSpeed: weatherData.current_weather.windspeed,
+      temperature: weatherData.current.temperature_2m,
+      windSpeed: weatherData.current.wind_speed_10m,
       weatherCondition:
-        WEATHER_CODES[weatherData.current_weather.weathercode] ??
+        WEATHER_CODES[weatherData.current.weather_code] ??
         'Unknown condition',
+      humidity: weatherData.current.relative_humidity_2m,
+      precipitation: weatherData.current.precipitation,
+      apparentTemperature: weatherData.current.apparent_temperature,
     };
   }
 );
