@@ -4,8 +4,8 @@ import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  title: 'AI or Not?',
-  description: 'Analyze images to determine if they are AI-generated.',
+  title: 'Real-time Weather',
+  description: 'A simple app to get real-time weather information.',
 };
 
 export default function RootLayout({
