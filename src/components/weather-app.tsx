@@ -166,8 +166,28 @@ export function WeatherApp() {
   const handleUnitChange = (checked: boolean) => {
     const newUnit = checked ? "fahrenheit" : "celsius";
     setTempUnit(newUnit);
-    if (activeTab) {
-      handleGetWeather(activeTab, newUnit);
+    
+    // Refetch weather for all saved cities with the new unit
+    if (savedCities.length > 0) {
+      setIsLoading(true);
+      const weatherPromises = savedCities.map(city => 
+        getWeather({ city, temperature_unit: newUnit })
+      );
+
+      Promise.allSettled(weatherPromises).then(results => {
+        const newWeatherData = { ...weatherData };
+        results.forEach((result, index) => {
+          const city = savedCities[index];
+          if (result.status === 'fulfilled') {
+            newWeatherData[city] = result.value;
+          } else {
+            console.error(`Failed to fetch weather for ${city}`, result.reason);
+            newWeatherData[city] = null; // Or keep old data, up to you
+          }
+        });
+        setWeatherData(newWeatherData);
+        setIsLoading(false);
+      });
     }
   }
 
@@ -230,26 +250,28 @@ export function WeatherApp() {
 
           {savedCities.length > 0 ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="overflow-x-auto justify-start">
-                {savedCities.map((savedCity) => (
-                  <div key={savedCity} className="relative group flex-shrink-0">
-                    <TabsTrigger value={savedCity} className="pr-8">
-                      {savedCity}
-                    </TabsTrigger>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeCity(savedCity);
-                      }}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-              </TabsList>
+              <div className="overflow-x-auto">
+                <TabsList>
+                  {savedCities.map((savedCity) => (
+                    <div key={savedCity} className="relative group flex-shrink-0">
+                      <TabsTrigger value={savedCity} className="pr-8">
+                        {savedCity}
+                      </TabsTrigger>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeCity(savedCity);
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </TabsList>
+              </div>
               {savedCities.map((savedCity) => (
                 <TabsContent key={savedCity} value={savedCity}>
                   {isLoading && activeTab === savedCity ? (
