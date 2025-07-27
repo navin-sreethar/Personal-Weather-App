@@ -108,7 +108,8 @@ export function WeatherApp() {
 
     if (activeTab === cityToRemove) {
       if (newSavedCities.length > 0) {
-        setActiveTab(newSavedCities[0]);
+        const newActiveTab = newSavedCities.includes(activeTab) ? activeTab : newSavedCities[0];
+        setActiveTab(newActiveTab);
       } else {
         setActiveTab("");
       }
@@ -169,20 +170,22 @@ export function WeatherApp() {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="overflow-x-auto">
                 {savedCities.map((savedCity) => (
-                  <TabsTrigger key={savedCity} value={savedCity} className="relative group pr-8">
-                    {savedCity}
-                     <Button
-                        size="icon"
-                        variant="ghost"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            removeCity(savedCity);
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                  </TabsTrigger>
+                  <div key={savedCity} className="relative group">
+                    <TabsTrigger value={savedCity} className="pr-8">
+                      {savedCity}
+                    </TabsTrigger>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeCity(savedCity);
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
                 ))}
               </TabsList>
               {savedCities.map((savedCity) => (
