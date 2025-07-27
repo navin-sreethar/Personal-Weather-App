@@ -180,28 +180,30 @@ export function WeatherApp() {
       const weatherPromises = savedCities.map(city => 
         getWeather({ city, temperature_unit: newUnit }).catch(err => {
             console.error(`Failed to fetch weather for ${city}:`, err);
-            // Return a specific object or null on error to handle it in Promise.allSettled
             return { error: true, city };
         })
       );
 
       Promise.all(weatherPromises).then(results => {
         const newWeatherData: Record<string, GetWeatherOutput | null> = {};
-        results.forEach((result: GetWeatherOutput | {error: boolean, city: string} | null) => {
-            if (result && 'summary' in result) {
-                 const cityKey = savedCities.find(c => result.summary.toLowerCase().includes(c.toLowerCase()));
-                 if (cityKey) {
-                    newWeatherData[cityKey] = result;
-                 }
-            } else if (result && 'error' in result) {
-                newWeatherData[result.city] = null;
+        const updatedCities: string[] = [];
+        
+        results.forEach((result, index) => {
+            const cityName = savedCities[index];
+            if (result && !('error' in result)) {
+                 newWeatherData[cityName] = result as GetWeatherOutput;
+                 updatedCities.push(cityName);
+            } else {
+                newWeatherData[cityName] = null;
                 toast({
-                    title: `Failed to update weather for ${result.city}`,
+                    title: `Failed to update weather for ${cityName}`,
                     variant: 'destructive'
                 })
             }
         });
         setWeatherData(newWeatherData);
+        setSavedCities(updatedCities);
+        localStorage.setItem(SAVED_CITIES_KEY, JSON.stringify(updatedCities));
         setIsLoading(false);
       });
     }
