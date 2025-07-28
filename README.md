@@ -1,4 +1,4 @@
-# nextn
+# Weather App
 
 A Next.js project with a weather application component.
 
