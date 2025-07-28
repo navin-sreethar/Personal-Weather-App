@@ -164,11 +164,12 @@ const weatherSummaryPrompt = ai.definePrompt(
         }),
       },
       output: { schema: z.object({ summary: z.string() }) },
-      prompt: `You are a friendly weather assistant. Given the weather data for a city, provide a short, conversational summary (2-3 sentences). Be encouraging and offer a small piece of advice, like suggesting to wear sunscreen if it's sunny, or to take an umbrella if it's raining.
+      prompt: `You are a friendly weather assistant. Given the weather data for a city, provide a short, conversational summary (2-3 sentences). Be encouraging and offer a small piece of advice, like suggesting to wear sunscreen if it's sunny, or to take an umbrella if it's raining. Make sure to include the temperature unit (°C or °F) in your summary.
 
 City: {{{city}}}
-Temperature: {{{temperature}}}{{#if (eq temperature_unit "celsius")}}°C{{else}}°F{{/if}}
-Feels Like: {{{apparentTemperature}}}{{#if (eq temperature_unit "celsius")}}°C{{else}}°F{{/if}}
+Temperature: {{{temperature}}}
+Feels Like: {{{apparentTemperature}}}
+Temperature Unit: {{{temperature_unit}}}
 Condition: {{{weatherCondition}}}
 Wind: {{{windSpeed}}} km/h
 Humidity: {{{humidity}}}%
