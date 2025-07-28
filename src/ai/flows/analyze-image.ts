@@ -164,7 +164,7 @@ const weatherSummaryPrompt = ai.definePrompt(
         }),
       },
       output: { schema: z.object({ summary: z.string() }) },
-      prompt: `You are a friendly weather assistant. Given the weather data for a city, provide a short, conversational summary (2-3 sentences). Be encouraging and offer a small piece of advice, like suggesting to wear sunscreen if it's sunny, or to take an umbrella if it's raining. Make sure to include the temperature unit (°C or °F) in your summary.
+      prompt: `You are a friendly weather assistant. Given the weather data for a city, provide a short, conversational summary (2-3 sentences). Be encouraging and offer a small piece of advice, like suggesting to wear sunscreen if it's sunny, or to take an umbrella if it's raining. Make sure to include the temperature unit in your summary.
 
 City: {{{city}}}
 Temperature: {{{temperature}}}
@@ -190,16 +190,25 @@ const getWeatherFlow = ai.defineFlow(
   },
   async (input) => {
     const weatherData = await getCurrentWeather(input);
-
-    const summaryResponse = await weatherSummaryPrompt({
-        ...weatherData,
-        city: input.city,
-        temperature_unit: input.temperature_unit || 'celsius',
-    });
+    
+    let summary = 'Could not retrieve AI summary.';
+    try {
+      const summaryResponse = await weatherSummaryPrompt({
+          ...weatherData,
+          city: input.city,
+          temperature_unit: input.temperature_unit || 'celsius',
+      });
+      if (summaryResponse.output?.summary) {
+        summary = summaryResponse.output.summary;
+      }
+    } catch (error) {
+      console.error("Could not generate weather summary:", error);
+      // Do not re-throw; allow fallback to default summary.
+    }
     
     return {
         ...weatherData,
-        summary: summaryResponse.output!.summary,
+        summary,
     }
   }
 );
